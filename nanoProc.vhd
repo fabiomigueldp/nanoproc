@@ -33,10 +33,13 @@ SIGNAL MW					: STD_LOGIC;
 -- Sinais da máquina de estados
 SIGNAL estado_atual, proximo_estado : t_estado;
 
--- Sinais de habilitação para controle dos registradores
-SIGNAL pc_enable, ir_enable, ac_enable : STD_LOGIC;
-
 BEGIN
+	-- Lógica do address bus (combinacional, fora do processo)
+	-- Usa PC para busca de instrução, IR(7 downto 0) para acesso a dados no LOAD
+	WITH estado_atual SELECT
+		addrBus <= IR(7 DOWNTO 0) WHEN s_executa_load,
+		           PC WHEN OTHERS;
+	
 	-- Componente de memória definida no arquivo DMEMORY.vhd
 	memoria : dmemory PORT MAP(	
 							read_data	=> dataBus,
@@ -47,7 +50,7 @@ BEGIN
 							reset			=> reset);
 							
 	-- PC, IR e AC são registradores, portanto sensíveis ao clock
-	-- Processo sequencial principal com controle por sinais de enable
+	-- Processo sequencial principal
 	PROCESS (clock, reset)
 	BEGIN
 		IF (reset = '1') THEN
@@ -56,51 +59,41 @@ BEGIN
 			AC <= X"0000";
 			estado_atual <= s_inicia;
 		ELSIF rising_edge(clock) THEN
-			-- Atualiza registradores somente se habilitados
-			IF (pc_enable = '1') THEN
-				PC <= PC + 1;
-			END IF;
-			IF (ir_enable = '1') THEN
-				IR <= dataBus;
-			END IF;
-			IF (ac_enable = '1') THEN
-				AC <= dataBus;
-			END IF;
 			-- Atualiza estado da máquina
 			estado_atual <= proximo_estado;
+			
+			-- Atualiza registradores conforme o estado
+			CASE estado_atual IS
+				WHEN s_le => -- Ciclo de Busca (Fetch)
+					IR <= dataBus;
+					PC <= PC + 1;
+					
+				WHEN s_executa_load => -- Ciclo de Execução do LOAD
+					AC <= dataBus;
+					
+				WHEN OTHERS =>
+					-- Nenhuma atualização necessária
+			END CASE;
 		END IF;
 	END PROCESS;
 	
 	-- Processo combinacional para controle da máquina de estados
-	PROCESS (estado_atual, IR, dataBus)
+	PROCESS (estado_atual, IR)
 	BEGIN
 		-- Valores padrão para evitar latches
-		pc_enable <= '0';
-		ir_enable <= '0';
-		ac_enable <= '0';
 		MW <= '0';
-		addrBus <= PC;
 		proximo_estado <= estado_atual;
 		
 		CASE estado_atual IS
 			WHEN s_inicia =>
-				-- Nenhuma ação de escrita, reset já zerou os registradores
 				proximo_estado <= s_le;
 				
 			WHEN s_le => -- Ciclo de Busca (Fetch)
-				-- Coloca o endereço da instrução no barramento
-				addrBus <= PC;
-				-- Habilita a escrita no IR com o dataBus no próximo clock
-				ir_enable <= '1';
-				-- Habilita o incremento do PC no próximo clock
-				pc_enable <= '1';
 				proximo_estado <= s_decodifica;
 				
 			WHEN s_decodifica => -- Ciclo de Decodificação
 				-- Verifica o opcode da instrução (8 bits mais significativos)
 				IF IR(15 DOWNTO 8) = X"02" THEN -- Instrução LOAD (opcode 02_HEX)
-					-- Coloca o endereço do operando no barramento
-					addrBus <= "00000000" & IR(7 DOWNTO 0);
 					proximo_estado <= s_executa_load;
 				ELSE
 					-- Se não for LOAD, volta a buscar a próxima instrução
@@ -108,9 +101,7 @@ BEGIN
 				END IF;
 				
 			WHEN s_executa_load => -- Ciclo de Execução do LOAD
-				-- Habilita a escrita no AC com o dado vindo do dataBus
-				ac_enable <= '1';
-				-- addrBus já foi configurado no estado anterior
+				-- addrBus é automaticamente configurado pelo WITH SELECT
 				proximo_estado <= s_le;
 				
 		END CASE;
