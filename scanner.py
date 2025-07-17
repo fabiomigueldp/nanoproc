@@ -15,6 +15,21 @@ import sys
 
 # --- CONFIGURATION ---
 
+# Directories to ignore (will be excluded completely along with all their contents)
+IGNORED_DIRECTORIES = (
+    '__pycache__', 'node_modules', '.git', '.vscode', '.idea', 'venv',
+    'db', 'incremental_db', 'simulation', 'greybox_tmp', 'hc_output', 
+    'output_files', 'work', 'modelsim_lib', 'questa_lib', 'transcript',
+    # Custom ignored directories - add your own here
+    'G14'  # Ignore G14 directory and all its contents
+)
+
+# Files to ignore (specific filenames that will be excluded from scanning)
+IGNORED_FILES = (
+    # Custom ignored files - add your own here
+    'teoria.md'  # Ignore teoria.md file
+)
+
 # Add or remove file extensions you want to scan.
 # This list covers most common development files including Quartus/FPGA files.
 TARGET_EXTENSIONS = (
@@ -95,11 +110,7 @@ def generate_project_snapshot():
 
         for dirpath, dirnames, filenames in os.walk(root_dir, topdown=True):
             # Exclude virtual environments and other common ignored directories, including Quartus-specific ones
-            dirnames[:] = [d for d in dirnames if d not in (
-                '__pycache__', 'node_modules', '.git', '.vscode', '.idea', 'venv', '.env',
-                'db', 'incremental_db', 'simulation', 'greybox_tmp', 'hc_output', 
-                'output_files', 'work', 'modelsim_lib', 'questa_lib', 'transcript'
-            )]
+            dirnames[:] = [d for d in dirnames if d not in IGNORED_DIRECTORIES]
             
             # Calculate depth for indentation
             relative_path = os.path.relpath(dirpath, root_dir)
@@ -118,6 +129,10 @@ def generate_project_snapshot():
             for i, filename in enumerate(display_items):
                 # Skip the scanner script itself
                 if os.path.join(dirpath, filename) == script_path:
+                    continue
+                
+                # Skip ignored files
+                if filename in IGNORED_FILES:
                     continue
                 
                 is_last_item = (i == len(display_items) - 1)

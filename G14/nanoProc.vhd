@@ -24,7 +24,7 @@ COMPONENT dmemory
 END COMPONENT;
 
 -- Declaração do tipo para a máquina de estados
-TYPE t_estado IS (s_inicia, s_le, s_decodifica, s_executa_load, s_executa_jump, s_executa_store);
+TYPE t_estado IS (s_inicia, s_le, s_decodifica, s_executa_load);
 
 SIGNAL AC, dataBus, IR	: STD_LOGIC_VECTOR(15 DOWNTO 0);
 SIGNAL PC, addrBus		: STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -37,7 +37,7 @@ BEGIN
 	-- Lógica do address bus (combinacional, fora do processo)
 	-- Usa PC para busca de instrução, IR(7 downto 0) para acesso a dados no LOAD
 	WITH estado_atual SELECT
-		addrBus <= IR(7 DOWNTO 0) WHEN s_executa_load | s_executa_store,
+		addrBus <= IR(7 DOWNTO 0) WHEN s_executa_load,
 		           PC WHEN OTHERS;
 	
 	-- Componente de memória definida no arquivo DMEMORY.vhd
@@ -59,14 +59,14 @@ BEGIN
 			AC <= X"0000";
 			estado_atual <= s_inicia;
 		ELSIF rising_edge(clock) THEN
-			-- Atualiza registradores conforme o estado ATUAL (antes de mudar)
+			-- Atualiza estado da máquina
+			estado_atual <= proximo_estado;
+			
+			-- Atualiza registradores conforme o estado
 			CASE estado_atual IS
 				WHEN s_le => -- Ciclo de Busca (Fetch)
 					IR <= dataBus;
 					PC <= PC + 1;
-				
-				WHEN s_executa_jump => -- Ciclo de Execução do JUMP
-					PC <= IR(7 DOWNTO 0);
 					
 				WHEN s_executa_load => -- Ciclo de Execução do LOAD
 					AC <= dataBus;
@@ -74,9 +74,6 @@ BEGIN
 				WHEN OTHERS =>
 					-- Nenhuma atualização necessária
 			END CASE;
-			
-			-- Atualiza estado da máquina DEPOIS dos registradores
-			estado_atual <= proximo_estado;
 		END IF;
 	END PROCESS;
 	
@@ -96,26 +93,15 @@ BEGIN
 				
 			WHEN s_decodifica => -- Ciclo de Decodificação
 				-- Verifica o opcode da instrução (8 bits mais significativos)
-				IF IR(15 DOWNTO 8) = X"01" THEN -- Instrução STORE (opcode 01_HEX)
-					proximo_estado <= s_executa_store;
-				ELSIF IR(15 DOWNTO 8) = X"02" THEN -- Instrução LOAD (opcode 02_HEX)
+				IF IR(15 DOWNTO 8) = X"02" THEN -- Instrução LOAD (opcode 02_HEX)
 					proximo_estado <= s_executa_load;
-				ELSIF IR(15 DOWNTO 8) = X"03" THEN -- Instrução JUMP (opcode 03_HEX)
-					proximo_estado <= s_executa_jump;
 				ELSE
-					-- Se a instrução não for reconhecida, volta a buscar a próxima
+					-- Se não for LOAD, volta a buscar a próxima instrução
 					proximo_estado <= s_le;
 				END IF;
 				
 			WHEN s_executa_load => -- Ciclo de Execução do LOAD
 				-- addrBus é automaticamente configurado pelo WITH SELECT
-				proximo_estado <= s_le;
-				
-			WHEN s_executa_jump => -- Ciclo de Execução do JUMP
-				proximo_estado <= s_le;
-				
-			WHEN s_executa_store => -- Ciclo de Execução do STORE
-				MW <= '1'; -- Habilita a escrita na memória!
 				proximo_estado <= s_le;
 				
 		END CASE;
