@@ -1,0 +1,45 @@
+DEPTH = 256;	% Memory depth and width are required	%
+WIDTH = 16;	% Enter a decimal number	%
+
+ADDRESS_RADIX = HEX;	% Address and value radixes are optional%
+DATA_RADIX = HEX;	% Enter BIN, DEC, HEX, or OCT; unless %
+				% otherwise specified, radixes = HEX	%
+-- Programa Final - Seção 5.1
+-- Algoritmo: 
+-- 1. Ler notas de 3A e 3B, somá-las
+-- 2. Se soma > 12, salvar soma em 3C, senão salvar 0 em 3C
+-- 3. Se nota1 > nota2, salvar nota1, senão salvar nota2
+CONTENT
+	BEGIN
+	00		:	023A; % LOAD 3A (carrega nota1 no AC) %
+	01		:	003B; % SUM 3B  (AC = nota1 + nota2) %
+	02		:	013D; % STORE 3D (salva soma temporariamente) %
+	03		:	053E; % SUB 3E  (AC = soma - 13, para verificar se soma > 12) %
+	04		:	040B; % JNEG 0B (se soma <= 12, pula para salvar 0 em 3C) %
+	05		:	023D; % LOAD 3D (recarrega a soma) %
+	06		:	013C; % STORE 3C (salva soma em 3C) %
+	07		:	023A; % LOAD 3A (carrega nota1) %
+	08		:	053B; % SUB 3B  (AC = nota1 - nota2) %
+	09		:	0412; % JNEG 12 (se nota1 < nota2, pula para salvar nota2) %
+	0A		:	0310; % JUMP 10 (pula para salvar nota1) %
+	0B		:	023F; % LOAD 3F (carrega 0) %
+	0C		:	013C; % STORE 3C (salva 0 em 3C) %
+	0D		:	023A; % LOAD 3A (carrega nota1) %
+	0E		:	053B; % SUB 3B  (AC = nota1 - nota2) %
+	0F		:	0412; % JNEG 12 (se nota1 < nota2, pula para salvar nota2) %
+	10		:	023A; % LOAD 3A (carrega nota1) %
+	11		:	0314; % JUMP 14 (pula para salvar e finalizar) %
+	12		:	023B; % LOAD 3B (carrega nota2) %
+	13		:	0314; % JUMP 14 (pula para salvar e finalizar) %
+	14		:	0140; % STORE 40 (salva maior nota em 40) %
+	15		:	0315; % JUMP 15 (loop infinito para observar resultados) %
+	[16..39]	:	0000;
+	3A		:	0008; % Nota 1 = 8 %
+	3B		:	0007; % Nota 2 = 7 %
+	3C		:	0000; % Resultado: soma se > 12, senão 0 %
+	3D		:	0000; % Temporário para soma %
+	3E		:	000D; % Constante 13 para comparação %
+	3F		:	0000; % Constante 0 %
+	40		:	0000; % Maior nota %
+	[41..FF]	:	0000;
+END ;

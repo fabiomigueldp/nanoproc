@@ -24,7 +24,7 @@ COMPONENT dmemory
 END COMPONENT;
 
 -- Declaração do tipo para a máquina de estados
-TYPE t_estado IS (s_inicia, s_le, s_decodifica, s_executa_load, s_executa_jump, s_executa_store);
+TYPE t_estado IS (s_inicia, s_le, s_decodifica, s_executa_load, s_executa_jump, s_executa_store, s_executa_sum, s_executa_sub, s_executa_jneg);
 
 SIGNAL AC, dataBus, IR	: STD_LOGIC_VECTOR(15 DOWNTO 0);
 SIGNAL PC, addrBus		: STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -33,11 +33,21 @@ SIGNAL MW					: STD_LOGIC;
 -- Sinais da máquina de estados
 SIGNAL estado_atual, proximo_estado : t_estado;
 
+-- Sinais da ULA
+SIGNAL ula_out : STD_LOGIC_VECTOR(15 DOWNTO 0);
+SIGNAL ula_op : STD_LOGIC_VECTOR(1 DOWNTO 0);
+
 BEGIN
+	-- Lógica da ULA (combinacional)
+	WITH ula_op SELECT
+		ula_out <= AC + dataBus WHEN "00", -- SUM
+		           AC - dataBus WHEN "01", -- SUB
+		           AC WHEN OTHERS;
+
 	-- Lógica do address bus (combinacional, fora do processo)
-	-- Usa PC para busca de instrução, IR(7 downto 0) para acesso a dados no LOAD
+	-- Usa PC para busca de instrução, IR(7 downto 0) para acesso a dados no LOAD, STORE, SUM e SUB
 	WITH estado_atual SELECT
-		addrBus <= IR(7 DOWNTO 0) WHEN s_executa_load | s_executa_store,
+		addrBus <= IR(7 DOWNTO 0) WHEN s_executa_load | s_executa_store | s_executa_sum | s_executa_sub,
 		           PC WHEN OTHERS;
 	
 	-- Componente de memória definida no arquivo DMEMORY.vhd
@@ -71,6 +81,17 @@ BEGIN
 				WHEN s_executa_load => -- Ciclo de Execução do LOAD
 					AC <= dataBus;
 					
+				WHEN s_executa_sum => -- Ciclo de Execução do SUM
+					AC <= ula_out;
+					
+				WHEN s_executa_sub => -- Ciclo de Execução do SUB
+					AC <= ula_out;
+					
+				WHEN s_executa_jneg => -- Ciclo de Execução do JNEG
+					IF (AC(15) = '1') THEN -- Verifica se AC é negativo (bit de sinal)
+						PC <= IR(7 DOWNTO 0);
+					END IF;
+					
 				WHEN OTHERS =>
 					-- Nenhuma atualização necessária
 			END CASE;
@@ -85,6 +106,7 @@ BEGIN
 	BEGIN
 		-- Valores padrão para evitar latches
 		MW <= '0';
+		ula_op <= "00"; -- Operação padrão da ULA
 		proximo_estado <= estado_atual;
 		
 		CASE estado_atual IS
@@ -96,12 +118,18 @@ BEGIN
 				
 			WHEN s_decodifica => -- Ciclo de Decodificação
 				-- Verifica o opcode da instrução (8 bits mais significativos)
-				IF IR(15 DOWNTO 8) = X"01" THEN -- Instrução STORE (opcode 01_HEX)
+				IF IR(15 DOWNTO 8) = X"00" THEN -- Instrução SUM (opcode 00_HEX)
+					proximo_estado <= s_executa_sum;
+				ELSIF IR(15 DOWNTO 8) = X"01" THEN -- Instrução STORE (opcode 01_HEX)
 					proximo_estado <= s_executa_store;
 				ELSIF IR(15 DOWNTO 8) = X"02" THEN -- Instrução LOAD (opcode 02_HEX)
 					proximo_estado <= s_executa_load;
 				ELSIF IR(15 DOWNTO 8) = X"03" THEN -- Instrução JUMP (opcode 03_HEX)
 					proximo_estado <= s_executa_jump;
+				ELSIF IR(15 DOWNTO 8) = X"04" THEN -- Instrução JNEG (opcode 04_HEX)
+					proximo_estado <= s_executa_jneg;
+				ELSIF IR(15 DOWNTO 8) = X"05" THEN -- Instrução SUB (opcode 05_HEX)
+					proximo_estado <= s_executa_sub;
 				ELSE
 					-- Se a instrução não for reconhecida, volta a buscar a próxima
 					proximo_estado <= s_le;
@@ -116,6 +144,17 @@ BEGIN
 				
 			WHEN s_executa_store => -- Ciclo de Execução do STORE
 				MW <= '1'; -- Habilita a escrita na memória!
+				proximo_estado <= s_le;
+				
+			WHEN s_executa_sum => -- Ciclo de Execução do SUM
+				ula_op <= "00"; -- Operação de soma na ULA
+				proximo_estado <= s_le;
+				
+			WHEN s_executa_sub => -- Ciclo de Execução do SUB
+				ula_op <= "01"; -- Operação de subtração na ULA
+				proximo_estado <= s_le;
+				
+			WHEN s_executa_jneg => -- Ciclo de Execução do JNEG
 				proximo_estado <= s_le;
 				
 		END CASE;
