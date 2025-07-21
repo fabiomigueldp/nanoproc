@@ -25,7 +25,7 @@ BEGIN
 		widthad_a => 8,
 		lpm_type => "altsyncram",
 		outdata_reg_a => "UNREGISTERED",
-		init_file => "program.mif",
+		init_file => "final_program.mif",
 		intended_device_family => "Cyclone"
 	)
 	PORT MAP (
